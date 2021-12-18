@@ -8,7 +8,6 @@ import scrapy
 
 class QuotesSpider(scrapy.Spider):
     name = 'quotes'
-
     start_urls = [
         'http://quotes.toscrape.com/'
     ]
@@ -18,6 +17,28 @@ class QuotesSpider(scrapy.Spider):
         'FEED_URI': 'quotes.json',
         'FEED_FORMAT': 'json'
     }
+
+    # creamos un nuevo método tipo parse para extraer únicamente las citas sin títulos
+    # ni top ten tags
+    # Como argumentos tendrá self (por ser un método de una clase) y response (respuesta del servidor).
+    # Le agregamos el argumeto **kwargs para desempaquetar el diccionario
+    def parse_only_quotes(self, response, **kwargs):
+        # Verificamos que hayamos recibido kwargs
+        if kwargs:
+            # Guardamos en una variable local lo que contenga este diccionario.
+            quotes = kwargs['quotes']
+            # Se coloca entre corchetes el nombre que definimos en la parte de response.follow() en este caso fue 'quotes'.
+        quotes.extend(response.xpath(
+            '//span[@class="text" and @itemprop="text"]/text()').getall())
+        # Ahora vamos con la tercer página y para esto preguntamos si existe un botón de next.
+        next_page_button_link = response.xpath(
+            '//ul[@class="pager"]//li[@class="next"]/a/@href').get()
+        if next_page_button_link:
+            yield response.follow(next_page_button_link, callback=self.parse_only_quotes, cb_kwargs={'quotes': quotes})
+        else:
+            yield {
+                'quotes': quotes
+            }
 
     def parse(self, response):
         title = response.xpath('//h1/a/text()').get()
@@ -31,7 +52,6 @@ class QuotesSpider(scrapy.Spider):
         # fácilmente.
         yield {
             'title': title,
-            'quotes': quotes,
             'top_ten_tags': top_ten_tags
         }
 
@@ -45,4 +65,5 @@ class QuotesSpider(scrapy.Spider):
         if next_page_button_link:
             # El método follow lleva dos parámetros: link a seguir y un callback que nos dice que vamos
             # a hacer con el link que estamos siguiendo.
-            yield response.follow(next_page_button_link, callback=self.parse)
+            yield response.follow(next_page_button_link, callback=self.parse_only_quotes, cb_kwargs={'quotes': quotes})
+            # Agregamos el argumento cb_kwargs=quotes para pasarlo al metodo que hace referencia el callback.
